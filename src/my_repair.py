@@ -14,9 +14,12 @@ class NormalizeWeights(Repair):
 
             # the packing plan for i
             z = Z[i]
+            #z = np.sort(z)[::-1] #required for coevolution
             #print(z)
             z = np.ceil(z)
             sum = np.sum(z)
+            if sum == 0:
+                sum = 0.0001
             z = z * 100 / sum
             #print(z)
             Z[i] = z

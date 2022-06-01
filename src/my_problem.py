@@ -29,15 +29,6 @@ class GW(ElementwiseProblem):
 
         super().__init__(n_var=8, n_obj=3, n_constr=7, xl=2, xu=50)
 
-    def _evaluate_sample(self, id: int):
-        dfq = pd.DataFrame(index=list(range(self.sub_weight[id].shape[0])))
-        dfq['sum'] = np.inner(x, self.sub_weight[id])
-        dfq['class'] = pd.qcut(dfq['sum'], 5, labels=[5, 4, 3, 2, 1])
-        q_class = dfq['class'].to_numpy()
-        mis_classed = q_class != self.validation_class[id]
-        diff = q_class - self.validation_class[id]
-        sum_diff = np.sum(np.abs(diff))
-        sum_misclassed = np.sum(mis_classed)
 
     def initialize(self, size: int, ahp_weight, rand_percentage: float):
         rand_init = Initialization(FloatRandomSampling(),
@@ -45,7 +36,7 @@ class GW(ElementwiseProblem):
         X1 = rand_init.do(self, int(size * rand_percentage))
         X2 = np.full((size-int(size * rand_percentage), 8), ahp_weight)
         X2 = Population.new(X=X2)
-        mutation = get_mutation("int_pm", eta=30, prob=1 / 8)
+        mutation = get_mutation("real_pm", eta=45, prob=1 / 8)#get_mutation("int_pm", eta=30, prob=1 / 8) #get_mutation("real_pm", eta=45, prob=1 / 8)
         X2_ = mutation.do(self, X2)
         X2_ = NormalizeWeights().do(self, X2_)
         X = Population.merge(X1, X2_)
@@ -53,9 +44,14 @@ class GW(ElementwiseProblem):
         return X
 
     def _evaluate(self, x, out, *args, **kwargs):
+        if np.isnan(x).any():
+            out["F"] = np.column_stack([np.inf, np.inf, np.inf])
+            out["G"] = np.column_stack([2, 2, 2, 2, 2, 2, 2])
+            return
+
         dfq = pd.DataFrame(index=list(range(self.sub_weight.shape[0])))
         dfq['sum'] = np.inner(x, self.sub_weight)
-        dfq['class'] = pd.qcut(dfq['sum'], 5, labels=[5, 4, 3, 2, 1])
+        dfq['class'] = pd.qcut(dfq['sum'], 5, labels=[1, 2, 3, 4, 5])
         q_class = dfq['class'].to_numpy()
         mis_classed = q_class != self.validation_class
         diff = q_class - self.validation_class
@@ -75,24 +71,24 @@ if __name__ == '__main__':
     x = []
     for f in Input.features_order:
         x.append(Input.ahp_weight[f])
-    prob.evaluate(np.array(x), None)
-    pop = prob.initialize(100, np.array(x), 0.5)
+    #prob.evaluate(np.array(x), None)
+    pop = prob.initialize(100, np.array(x), 0.8)
     X =  pop.get("X")
     X2 = np.full((100, 8), np.array(x))
 
 
-    algorithm = NSGA2(pop_size=100,
+    algorithm = NSGA2(pop_size=50,
                       # n_offsprings=100,
-                      sampling=pop,
-                      #crossover=get_crossover("real_sbx", prob=0.8, eta=40),
-                      crossover=get_crossover("int_sbx", prob=0.8, eta=30),
-                      #mutation=get_mutation("real_pm", eta=45, prob=1 / 8),
-                      mutation=get_mutation("int_pm", eta=30, prob=1 / 8),
-                      repair=NormalizeWeights(),
+                      #sampling=pop, #seems not good
+                      crossover=get_crossover("real_sbx", prob=0.8, eta=40),
+                      #crossover=get_crossover("int_sbx", prob=0.8, eta=30), #seems not good
+                      mutation=get_mutation("real_pm", eta=45, prob=1 / 8),
+                      #mutation=get_mutation("int_pm", eta=30, prob=1 / 8), #seems not good
+                      repair=NormalizeWeights(), #seems good
                       eliminate_duplicates=True)
     res = minimize(prob,
                    algorithm,
-                   termination=('n_gen', 200),
+                   termination=('n_gen', 500),
                    seed=1,
                    verbose=True,
                    save_history=False)
